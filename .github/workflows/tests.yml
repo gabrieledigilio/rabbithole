@@ -1,0 +1,46 @@
+# Unit tests, then the whole pipeline (extract -> load -> analyze -> API) on a four-article
+# Wikipedia, against a real MariaDB. Runs on both the version Rabbit Hole was built on and the
+# newest long-term release.
+name: tests
+
+# Started by hand (Actions tab > tests > Run workflow) until it has had its first green run.
+on:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    # GitHub's own runner by default. To run on CRACI instead, set the repository variable RUNNER
+    # to craci (Settings > Secrets and variables > Actions > Variables).
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        mariadb: ["mariadb:11.8", "mariadb:lts"]
+    services:
+      mariadb:
+        image: ${{ matrix.mariadb }}
+        env:
+          MARIADB_ROOT_PASSWORD: rabbithole
+          MARIADB_DATABASE: rabbithole_test
+          MARIADB_USER: rabbithole
+          MARIADB_PASSWORD: rabbithole
+        ports:
+          - 3309:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Tests
+        run: python -m unittest discover -s tests -v
+      - name: How system versioning and vectors behave on this MariaDB
+        run: python pipeline/experiments/versioning_checks.py
+        env:
+          DB_NAME: rabbithole_test

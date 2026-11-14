@@ -1,0 +1,33 @@
+# MariaDB for Rabbit Hole. Start:  docker compose up -d --wait
+# The tables are created by pipeline/load.py (setup.sh runs it), not mounted into the container:
+# Docker on a Mac may not see files outside your home folder.
+services:
+  mariadb:
+    # 11.8 is the version this was built and measured on. MARIADB_IMAGE=mariadb:lts tries the newest
+    # long-term release instead.
+    image: ${MARIADB_IMAGE:-mariadb:11.8}
+    command:
+      - --innodb-buffer-pool-size=1G          # the tables come to 1.3 GB; the busy part fits
+      - --innodb-log-file-size=1G
+      - --innodb-flush-log-at-trx-commit=2    # a demo database that can be reloaded: speed over durability
+      - --max-allowed-packet=256M
+      - --mhnsw-max-cache-size=536870912      # room to keep the whole vector index in memory (the default is 16 MB)
+      - --character-set-server=utf8mb4
+    environment:
+      MARIADB_ROOT_PASSWORD: rabbithole
+      MARIADB_DATABASE: rabbithole
+      MARIADB_USER: rabbithole
+      MARIADB_PASSWORD: rabbithole
+    ports:
+      # 3309 on your machine: clear of a local MariaDB (3306) and the two starter demos (3307, 3308).
+      # 127.0.0.1: the password is no secret, so the port is not opened to the network you are on.
+      - "127.0.0.1:3309:3306"
+    volumes:
+      - rabbithole-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 30
+
+volumes:
+  rabbithole-data:

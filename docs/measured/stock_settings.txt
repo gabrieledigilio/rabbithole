@@ -1,0 +1,63 @@
+articles ...
+  articles-en.parquet: 5,254 articles
+  articles-fi.parquet: 19,285 articles
+  articles-sv.parquet: 4,921 articles
+articles: 46 s
+vectors ...
+  vectors-bge-m3-en.parquet: 5,254 vectors, 8 s (the vector index is built as they arrive)
+  vectors-bge-m3-fi.parquet: 19,285 vectors, 166 s (the vector index is built as they arrive)
+  vectors-bge-m3-sv.parquet: 4,921 vectors, 50 s (the vector index is built as they arrive)
+vectors: 224 s
+graph ...
+  page: 19,742 articles, each from the moment it was created
+  link: 561,066 links of today + 196,847 history rows; 756,661 contexts
+graph: 47 s
+revisions ...
+  revision: 862,076 saved versions
+revisions: 32 s
+leads ...
+  lead: 19,742 leads of today + 183,576 earlier versions
+leads: 21 s
+titles ...
+  fiwiki_title: 568,416 article titles from dataset L
+titles: 6 s
+Loaded into MariaDB 11.8.3-MariaDB-1build1 from Ubuntu in 376 s. Next: python pipeline/analyze.py
+  page_stat: 24.1 s
+  year_stat, hub_year: 22.4 s
+  contested: 15.4 s
+  waited: 3.9 s
+  wanted: 5.2 s
+Done in 80 s.
+  versions          862,076
+  pages              19,742
+  editors            73,436
+  link_periods      757,913
+  links_ever        733,009
+  links_now         561,066
+  links_gone        171,943
+  lead_versions     203,318
+  contested             212
+  waited              2,596
+  wanted              9,409
+MariaDB 11.8.3-MariaDB-1build1 from Ubuntu, 7 runs each
+
+question                                                                   statements    median   slowest
+An article and its timeline (Talvisota)                                             1    1.6 ms    2.2 ms
+Its connections through time: 150 of them, every period (Talvisota)                 3   62.5 ms  189.9 ms
+The same for the most linked-to article (Suomen sisällissota)                       3   66.9 ms  112.0 ms
+The article as of 1 June 2012: opening, counts, links since                         5   14.0 ms   23.7 ms
+Nearest in meaning x linked today x linked in 2012 x ever: one statement            1   10.2 ms   62.9 ms
+The life of one link (Isoviha > Kansanmurha)                                        1    1.2 ms    3.2 ms
+Every opening an article has had (Talvisota)                                        1    5.9 ms    6.8 ms
+Shortest way between two articles today (Isoviha > Urho Kekkonen)                   3    1.8 ms   12.5 ms
+... and as of 2008                                                                  4    3.8 ms   11.7 ms
+The whole graph as of the end of 2010: size and the 10 most linked-to               3  812.9 ms 2293.0 ms
+Hybrid search: vector + full text, fused, one statement                             1  905.4 ms 1002.4 ms
+Keyword search alone                                                                1  611.4 ms 1262.1 ms
+Follow the links of five results                                                    1    4.5 ms   35.8 ms
+Contested connections (the Disputes page)                                           1    3.1 ms    9.3 ms
+Linked before written (a Gaps page)                                                 1    2.9 ms    8.7 ms
+
+real	7m57.831s
+user	0m59.928s
+sys	0m3.333s

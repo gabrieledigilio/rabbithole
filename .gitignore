@@ -1,0 +1,10 @@
+data/
+.venv/
+.env
+__pycache__/
+*.pyc
+.DS_Store
+setup.log
+app.log
+.app.pid
+.setup-done

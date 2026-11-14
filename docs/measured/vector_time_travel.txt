@@ -1,0 +1,27 @@
+built x_vector_history in 154 s
+MariaDB 11.8.3-MariaDB-1build1 from Ubuntu: x_vector_history has 57,855 rows with one vector index (19,285 current, 38,570 history)
+
+  versioned, today (newest of 3 versions)       ef_search   80   recall@10  99%   rows missing: 0   median   9.2 ms
+  versioned, as of 2016 (middle version)        ef_search   80   recall@10  99%   rows missing: 0   median   5.1 ms
+  versioned, as of 2008 (oldest version)        ef_search   80   recall@10  71%   rows missing: 0   median  22.6 ms
+  control: the 2008 vectors alone, plain table  ef_search   80   recall@10  97%   rows missing: 0   median   3.9 ms
+
+  versioned, today (newest of 3 versions)       ef_search  200   recall@10  99%   rows missing: 0   median   5.4 ms
+  versioned, as of 2016 (middle version)        ef_search  200   recall@10  99%   rows missing: 0   median   6.6 ms
+  versioned, as of 2008 (oldest version)        ef_search  200   recall@10  82%   rows missing: 0   median  32.5 ms
+  control: the 2008 vectors alone, plain table  ef_search  200   recall@10  99%   rows missing: 0   median   2.3 ms
+
+  versioned, today (newest of 3 versions)       ef_search  400   recall@10  99%   rows missing: 0   median   8.6 ms
+  versioned, as of 2016 (middle version)        ef_search  400   recall@10 100%   rows missing: 0   median  12.0 ms
+  versioned, as of 2008 (oldest version)        ef_search  400   recall@10  87%   rows missing: 0   median  50.4 ms
+  control: the 2008 vectors alone, plain table  ef_search  400   recall@10 100%   rows missing: 0   median   3.0 ms
+
+  versioned, today (newest of 3 versions)       ef_search  800   recall@10 100%   rows missing: 0   median  13.2 ms
+  versioned, as of 2016 (middle version)        ef_search  800   recall@10 100%   rows missing: 0   median  19.7 ms
+  versioned, as of 2008 (oldest version)        ef_search  800   recall@10  92%   rows missing: 0   median  71.4 ms
+  control: the 2008 vectors alone, plain table  ef_search  800   recall@10 100%   rows missing: 0   median   4.1 ms
+
+  versioned, as of 2008, every row compared     index not used   recall@10 100%   rows missing: 0   median 107.8 ms
+  versioned, today, every row compared          index not used   recall@10 100%   rows missing: 0   median  99.8 ms
+
+  EXPLAIN, as of 2008 (type, key, rows): [('index', 'embedding', '10')]

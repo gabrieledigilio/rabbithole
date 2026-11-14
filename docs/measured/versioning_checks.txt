@@ -1,0 +1,25 @@
+MariaDB 11.8.3-MariaDB-1build1 from Ubuntu
+
+Vectors and system versioning in one table
+  a VECTOR INDEX on a system-versioned table can be created                  yes
+  history rows with vectors can be written with their own dates              yes (system_versioning_insert_history)
+  the nearest rows AS OF 2015 are the ones that were nearest in 2015         yes
+  ... and that search uses the vector index                                  yes
+  a vector handed over by a scalar subquery still uses the index             yes
+  an UPDATE keeps the old vector as a history row                            3 versions of row 7
+  a versioned table with a VECTOR INDEX can be PARTITIONed BY SYSTEM_TIME    no: Partitioned tables do not support VECTOR
+
+SET system_versioning_asof = '2015-01-01 00:00:00': which statements then read the past?
+  SELECT                                                                     the past
+  a join of two versioned tables                                             the past
+  a subquery                                                                 the past
+  a derived table                                                            the past
+  a common table expression                                                  the past
+  a recursive CTE (both its halves)                                          the past
+  a view                                                                     the past
+  a statement prepared before the setting, executed under it                 TODAY: the setting is ignored
+  a statement prepared under the setting, executed under it                  the past
+  ... and executed again after the setting is back to DEFAULT                STILL THE PAST
+  INSERT ... SELECT                                                          TODAY: the setting is ignored
+  CREATE TABLE ... AS SELECT                                                 TODAY: the setting is ignored
+  INSERT ... SELECT with FOR SYSTEM_TIME AS OF written in the SELECT         the past

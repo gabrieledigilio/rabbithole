@@ -1,0 +1,7 @@
+No embedding model at http://127.0.0.1:9 (ollama pull bge-m3): measuring keyword search only.
+
+37 questions.  MariaDB: mhnsw_ef_search = 80
+mode      | hit@1 | hit@5 | hit@10 |  MRR | SQL, median
+words     |    8% |   16% |    38% | 0.13 |  52.6 ms
+
+In the sources handed to the language model (top 5 of 'words' + what they link to together): 19%, 1 of them found by following links.

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rabbit Hole: Wikipedia's connections through time</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="#/" aria-label="Rabbit Hole, start page">
+    <svg viewBox="0 0 28 28" width="26" height="26" aria-hidden="true"><circle cx="14" cy="14" r="12.5"/><circle cx="14" cy="14" r="8"/><circle cx="14" cy="14" r="3.6" class="pit"/></svg>
+    <span>Rabbit Hole</span>
+  </a>
+  <form class="find" id="find" role="search" autocomplete="off">
+    <label class="sr" for="q">Find an article or ask a question</label>
+    <input id="q" type="search" placeholder="Find an article, or ask a question about the history of Finland" aria-controls="suggest" aria-autocomplete="list">
+    <ul id="suggest" class="suggest" role="listbox" hidden></ul>
+  </form>
+  <nav class="tabs" aria-label="Views">
+    <a href="#/" data-tab="explore">Explore</a>
+    <a href="#/disputes" data-tab="disputes">Disputes</a>
+    <a href="#/gaps" data-tab="gaps">Gaps</a>
+    <a href="#/big-picture" data-tab="big-picture">Big picture</a>
+  </nav>
+  <button id="sql-toggle" class="sql-toggle" type="button" aria-expanded="false" aria-controls="sql-drawer">Show the SQL</button>
+</header>
+<main id="view" tabindex="-1"></main>
+<aside id="sql-drawer" class="sql-drawer" hidden aria-label="The SQL behind this page">
+  <header>
+    <h2>The SQL behind this page</h2>
+    <p id="sql-summary"></p>
+    <button type="button" id="sql-close" aria-label="Close the SQL panel">Close</button>
+  </header>
+  <div id="sql-list"></div>
+</aside>
+<div id="tip" class="tip" role="tooltip" hidden></div>
+<script src="/static/vendor/d3.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+MariaDB 11.8.3-MariaDB-1build1 from Ubuntu, 7 runs each
+
+question                                                                   statements    median   slowest
+An article and its timeline (Talvisota)                                             1    1.0 ms    1.7 ms
+Its connections through time: 150 of them, every period (Talvisota)                 3   40.3 ms  118.7 ms
+The same for the most linked-to article (Suomen sisällissota)                       3   47.6 ms   79.7 ms
+The article as of 1 June 2012: opening, counts, links since                         5   12.6 ms   26.3 ms
+Nearest in meaning x linked today x linked in 2012 x ever: one statement            1    2.6 ms   11.5 ms
+The life of one link (Isoviha > Kansanmurha)                                        1    0.8 ms    2.1 ms
+Every opening an article has had (Talvisota)                                        1    4.1 ms    4.5 ms
+Shortest way between two articles today (Isoviha > Urho Kekkonen)                   3    1.1 ms    4.1 ms
+... and as of 2008                                                                  4    2.8 ms    4.9 ms
+The whole graph as of the end of 2010: size and the 10 most linked-to               3  463.1 ms  788.2 ms
+Hybrid search: vector + full text, fused, one statement                             1   36.9 ms  340.6 ms
+Keyword search alone                                                                1   38.7 ms   43.1 ms
+Follow the links of five results                                                    1    2.8 ms    3.3 ms
+Contested connections (the Disputes page)                                           1    1.9 ms    2.1 ms
+Linked before written (a Gaps page)                                                 1    1.5 ms    3.3 ms
