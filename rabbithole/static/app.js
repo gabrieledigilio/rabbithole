@@ -853,17 +853,17 @@ async function showBigPicture() {
     rows.forEach((x, i) => {
       let b = bars.get(x.page_id);
       if (!b) {
-        b = { g: svgEl('g', {}), rect: svgEl('rect', { x: 0, y: 6, height: 12, rx: 3, fill: LINK }), name: svgEl('text', { class: 'name', x: 0, y: 0 }), val: svgEl('text', { class: 'val', y: 16.5 }) };
+        b = { g: svgEl('g', {}), rect: svgEl('rect', { x: 0, y: 6, height: 12, rx: 3, fill: LINK }), name: svgEl('text', { class: 'name', x: 0, y: 0 }), val: svgEl('text', { class: 'val', x: 6, y: 16.5 }) };
         b.name.textContent = x.title_en && x.title_en !== x.title ? `${x.title} (${x.title_en})` : x.title;
         const link = svgEl('a', { href: `#/a/${x.page_id}?t=${yr}-12-31` }); link.append(b.rect, b.name, b.val);
-        b.g.append(link); b.g.style.transition = reducedMotion ? '' : 'transform .45s ease'; b.rect.style.transition = reducedMotion ? '' : 'width .45s ease';
+        b.g.append(link); b.g.style.transition = b.val.style.transition = reducedMotion ? '' : 'transform .45s ease'; b.rect.style.transition = reducedMotion ? '' : 'width .45s ease';
         hubs.append(b.g); bars.set(x.page_id, b);
         b.g.style.transform = `translate(0px, ${16 + i * ROW}px)`;
       }
       const w = Math.max(2, (x.links_in / top) * 480);
       b.g.style.transform = `translate(0px, ${16 + i * ROW}px)`;
       b.rect.setAttribute('width', w); b.rect.style.width = w + 'px';
-      b.val.setAttribute('x', w + 6); b.val.textContent = n(x.links_in);
+      b.val.style.transform = `translate(${w}px, 0px)`; b.val.textContent = n(x.links_in);
     });
     const yrow = years.find((y) => y.yr === yr);
     mark.setAttribute('transform', `translate(${gx(yr)},0)`);

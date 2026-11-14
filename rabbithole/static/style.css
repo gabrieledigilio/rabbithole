@@ -123,7 +123,7 @@ main { min-height: 0; position: relative; }
 .time .when .what { font-size: 12px; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 2px 14px; align-items: baseline; }
 .time .when .what .k { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; }
 .time .chart { grid-column: 2; position: relative; height: 84px; }
-.time .chart svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.time .chart svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }   /* the slider under the drawing takes the mouse */
 .time .chart input[type="range"] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
 .time .axis text { font: 11px var(--sans); fill: var(--ink-3); }
 .time .rowlabel { font: 11px var(--sans); fill: var(--ink-3); }
