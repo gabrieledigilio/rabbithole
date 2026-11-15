@@ -1,5 +1,9 @@
 # Rabbit Hole: how Wikipedia's knowledge got connected, on MariaDB
 
+> **Try it in the browser:** [rabbithole-lime-five.vercel.app](https://rabbithole-lime-five.vercel.app)
+> is a snapshot: this same page replaying answers recorded from the database, with no database
+> behind it. It says so on every view; [what is in it](#the-snapshot-the-app-where-there-is-no-database).
+>
 > **Status:** built and measured on **MariaDB 11.8.3** (Linux). `./setup.sh --local` ran from an
 > empty folder to a working app; `./mac.sh` has run on one Apple-silicon Mac, from nothing to the
 > open app; 53 automated tests pass (Python 3.9, 3.13 and 3.14); a scripted browser run clicks
