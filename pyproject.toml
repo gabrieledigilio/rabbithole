@@ -1,0 +1,11 @@
+# What a host that reads pyproject.toml (Vercel does) needs to run the web app: where the Flask app is,
+# and the three packages it imports. The data pipeline needs more; those are in requirements.txt.
+[project]
+name = "rabbithole"
+version = "0.1.0"
+description = "Wikipedia's link graph through time, on MariaDB"
+requires-python = ">=3.10"
+dependencies = ["flask", "pymysql", "requests"]
+
+[tool.vercel]
+entrypoint = "rabbithole.app:app"
