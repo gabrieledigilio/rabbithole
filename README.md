@@ -2,7 +2,7 @@
 
 > **Status:** built and measured on **MariaDB 11.8.3** (Linux). `./setup.sh --local` ran from an
 > empty folder to a working app; `./mac.sh` has run on one Apple-silicon Mac, from nothing to the
-> open app; 44 automated tests pass (Python 3.9, 3.13 and 3.14); a scripted browser run clicks
+> open app; 53 automated tests pass (Python 3.9, 3.13 and 3.14); a scripted browser run clicks
 > through every view without an error.
 >
 > **Not verified yet:** MariaDB 12 and 13 (`mariadb:lts` is 12.3, which the CI workflow is written
@@ -200,6 +200,8 @@ all titles of fi.wikipedia (to tell a red link from a link out of the topic) ─
                                                                                          contested links, gaps (all SQL)
 rabbithole/app.py: a JSON API (Flask), every answer carries its SQL ◄── rabbithole/queries.py ◄──────────┘
 rabbithole/static: one page, no build step (D3 for the layout, canvas for the rings)
+
+pipeline/snapshot.py ─► rabbithole/snapshot/ ─► rabbithole/replay.py: the same page where there is no database
 ```
 
 **Reading the links** ([rabbithole/wikitext.py](rabbithole/wikitext.py),
@@ -309,6 +311,43 @@ The outputs these tables were copied from are in [docs/measured](docs/measured).
 For comparison, the RAG starter reports 16% (keyword) and 76% (vector) for hit@5 on the same
 questions.
 
+## The snapshot: the app where there is no database
+
+A static host runs a web page and nothing else. For such a place the repository carries a
+**snapshot**: 46,310 answers of the app's own API, recorded from MariaDB with the SQL and
+the timing of every statement, and a replay mode that serves them back.
+
+```bash
+python pipeline/snapshot.py          # record: about two minutes, needs the loaded database
+SNAPSHOT=1 python -m rabbithole      # replay: the same page, and no database is opened
+```
+
+On Vercel the replay is on by itself when no `DB_HOST` is set. The page says what it is on every
+view: a line under the top bar, "as recorded" where the live app says "asked live", and a page
+of its own that lists what is in it (`#/snapshot`).
+
+| In the snapshot (`rabbithole/snapshot/`, 20 MB) | How deep |
+|---|---|
+| Big picture, disputes, gaps | whole: the same lists the live app shows |
+| 16 articles, month by month | the first day of every month of the article's life, its opening through the years, the story of every link in its picture |
+| 144 articles, year by year | the last day of every year, the story of every link in the picture |
+| 801 articles, as they stand today | the page, its picture (which still plays the whole history), today's text |
+
+What it leaves out, and how it says so:
+
+- **Every other day and article.** A day that was not recorded is answered with the last recorded
+  day before it, and the reply names both days. Nothing is interpolated. An article that was not
+  recorded gets a page that says so; its links are grey wherever they appear.
+- **Questions, explanations and routes.** A language model writes the first two per request and
+  MariaDB works out a route per pair of articles and day. A replay cannot do either.
+- **Editors' names.** The live API returns user names, and IP addresses for unregistered editors.
+  A snapshot is a public copy, so the recorder drops both and writes `[editor]` where an edit
+  summary named someone. Every edit still links to Wikipedia, where its author is credited.
+
+Nothing is computed from the data again: [rabbithole/replay.py](rabbithole/replay.py) finds a
+recorded answer or says it has none. The one exception is the title box, a prefix match over the
+recorded titles.
+
 ## Tests
 
 ```bash
@@ -323,6 +362,9 @@ docker compose up -d --wait
 - **`tests/test_wikitext.py`**: links, redirects, nested templates, the sentence around a link.
 - **`tests/test_llm.py`**: the chat client against a stand-in endpoint: one that refuses unknown
   settings, one that sends its thinking in the text, one that is not there.
+- **`tests/test_replay.py`**: the snapshot answering every view with database access switched
+  off: a day between two recorded days, an article kept only as it stands today, a link story
+  with no editor named, and what it says about the things it does not have.
 - **`.github/workflows/tests.yml`** runs all of it against `mariadb:11.8` and `mariadb:lts`, on
   GitHub's runners or on CRACI (set the repository variable `RUNNER` to `craci`). Start it from
   the Actions tab. Written, not yet run.

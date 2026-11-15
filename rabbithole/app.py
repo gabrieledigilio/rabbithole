@@ -3,6 +3,8 @@
     python -m rabbithole          # http://localhost:8000
 
 Every answer carries the SQL that produced it ("sql": [...]); the page shows it in its SQL drawer.
+
+Where there is no database (a static host), the same page replays answers recorded from one: replay.py.
 """
 import datetime
 import decimal
@@ -13,7 +15,7 @@ import time
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask.json.provider import DefaultJSONProvider
 
-from . import config, db, llm
+from . import config, db, llm, replay
 from . import queries as Q
 from .db import Session
 
@@ -60,9 +62,23 @@ def failed(e):
     return jsonify({"error": f"{type(e).__name__}: {e}"}), 500
 
 
+@app.before_request
+def from_snapshot():
+    """Replaying a snapshot: every question is answered from what was recorded, and none reaches a database."""
+    if request.path.startswith("/api/") and replay.on():
+        return replay.answer()
+
+
+@app.after_request
+def keep(reply):
+    if request.path.startswith("/static/") and replay.on():       # the snapshot's page asks for its files by version
+        reply.headers["Cache-Control"] = "public, max-age=86400, s-maxage=86400"
+    return reply
+
+
 @app.get("/")
 def index():
-    return send_from_directory(STATIC, "index.html")
+    return replay.shell(STATIC) if replay.on() else send_from_directory(STATIC, "index.html")
 
 
 @app.get("/api/status")
@@ -247,11 +263,15 @@ def path():
 
 
 def main():
-    print(f"Rabbit Hole: http://localhost:{config.PORT}   (MariaDB {config.DB['host']}:{config.DB['port']})")
-    try:
-        note = db.small_memory()
-    except Exception as e:                       # MariaDB is not up: the page will say so too
-        note = f"MariaDB cannot be reached yet: {e.args[-1] if e.args else e}"
+    if replay.on():
+        note = None if replay.recorded() else "SNAPSHOT is on, but nothing has been recorded: run python pipeline/snapshot.py"
+        print(f"Rabbit Hole: http://localhost:{config.PORT}   (replaying a snapshot: no database is used)")
+    else:
+        print(f"Rabbit Hole: http://localhost:{config.PORT}   (MariaDB {config.DB['host']}:{config.DB['port']})")
+        try:
+            note = db.small_memory()
+        except Exception as e:                   # MariaDB is not up: the page will say so too
+            note = f"MariaDB cannot be reached yet: {e.args[-1] if e.args else e}"
     if note:
         print("\n" + note + "\n")
     app.run(host=os.environ.get("HOST", "127.0.0.1"), port=config.PORT, threaded=True, debug=False, load_dotenv=False)

@@ -20,6 +20,8 @@ function h(tag, attrs, ...kids) {
   }
   return el;
 }
+// The DOM's own replaceChildren prints the word "null" for a missing child; this skips it, as h() does.
+const fill = (el, ...kids) => el.replaceChildren(...kids.flat(3).filter((kid) => kid != null && kid !== false));
 const svgEl = (tag, attrs) => { const el = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in attrs) el.setAttribute(k, attrs[k]); return el; };
 
 const NUM = new Intl.NumberFormat('en-GB');
@@ -41,6 +43,11 @@ const plural = (count, one, many) => `${n(count)} ${count === 1 ? one : (many ||
 const wiki = (lang, title) => `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+
+// Where there is no database, the server replays answers recorded from one (rabbithole/replay.py) and says so here.
+const SNAP = window.SNAPSHOT || null;
+if (SNAP) SNAP.ids = new Set(SNAP.ids);
+const LIVE = SNAP ? `${SNAP.source}#readme` : null;
 
 // The link's words sit between ⟦ and ⟧ in a context sentence; '⌂ ' in front = inside a table or template.
 function contextNodes(text) {
@@ -83,7 +90,7 @@ const Sql = {
     if (all.length) btn.append(h('span', { class: 'n num' }, `${all.length} statements, ${total < 10 ? total.toFixed(1) : Math.round(total)} ms`));
     if ($('#sql-drawer').hidden) return;
     $('#sql-summary').textContent = all.length
-      ? `${all.length} statements for what is on screen, ${Math.round(total)} ms in MariaDB. Time travel and vector search are highlighted.`
+      ? `${all.length} statements for what is on screen, ${Math.round(total)} ms in MariaDB${SNAP ? ' when they were recorded' : ''}. Time travel and vector search are highlighted.`
       : 'Nothing has been asked yet.';
     $('#sql-list').replaceChildren(...this.calls.map((c) => h('div', { class: 'sql-call' },
       h('h3', null, c.label),
@@ -108,7 +115,7 @@ $('#sql-close').addEventListener('click', () => Sql.toggle(false));
 async function api(path, label) {
   const r = await fetch(path);
   const data = await r.json().catch(() => ({ error: r.statusText }));
-  if (!r.ok) throw new Error(data.error || r.statusText);
+  if (!r.ok) throw Object.assign(new Error(data.error || r.statusText), { snapshot: data.snapshot });      // snapshot: this answer was not recorded
   if (label && data.sql) Sql.add(label, data.sql);
   return data;
 }
@@ -155,14 +162,15 @@ const Tip = {
 
 // ------------------------------------------------------------------ search box: titles as you type, a question on Enter
 function suggestBox(input, list, onPick, askRow) {
-  let items = [], at = -1, seq = 0;
+  let items = [], at = -1, seq = 0, note = null;
   const close = () => { list.hidden = true; at = -1; };
   const paint = () => {
     const text = input.value.trim();
     const rows = items.map((it, i) => h('li', { role: 'option', 'aria-selected': String(i === at), onmousedown: (e) => { e.preventDefault(); pick(i); } },
       h('span', { class: 't' }, it.title), it.title_en && it.title_en !== it.title ? h('span', { class: 'faint' }, it.title_en) : null));
+    if (note) rows.push(h('li', { class: 'note', 'aria-disabled': 'true', onmousedown: (e) => e.preventDefault() }, note));
     if (askRow && text) rows.push(h('li', { class: 'ask-row', role: 'option', 'aria-selected': String(at === items.length), onmousedown: (e) => { e.preventDefault(); pick(items.length); } },
-      h('span', null, 'Ask Wikipedia: '), h('span', { class: 't' }, text)));
+      h('span', null, SNAP ? 'Ask Wikipedia (in the live app): ' : 'Ask Wikipedia: '), h('span', { class: 't' }, text)));
     list.replaceChildren(...rows);
     list.hidden = !rows.length;
   };
@@ -174,9 +182,9 @@ function suggestBox(input, list, onPick, askRow) {
   };
   const load = debounce(async () => {
     const text = input.value.trim(), mine = ++seq;
-    if (text.length < 2) { items = []; paint(); return; }
+    if (text.length < 2) { items = []; note = null; paint(); return; }
     const rows = await api('/api/suggest?q=' + encodeURIComponent(text)).catch(() => []);
-    if (mine === seq) { items = rows; at = -1; paint(); }
+    if (mine === seq) { items = rows.filter((r) => !r.note); note = (rows.find((r) => r.note) || {}).note || null; at = -1; paint(); }
   }, 120);
   input.addEventListener('input', load);
   input.addEventListener('focus', () => { if (input.value.trim().length >= 2) load(); });
@@ -502,7 +510,7 @@ const Explore = {
       let page, graph;
       try {
         [page, graph] = await Promise.all([api(`/api/page/${id}`, 'This article: its numbers and its months'), api(`/api/page/${id}/graph`, 'Its connections, over its whole life')]);
-      } catch (e) { view.replaceChildren(h('p', { class: 'error' }, `That article is not in the graph. ${e.message}`)); return; }
+      } catch (e) { view.replaceChildren(SNAP ? notRecorded(e.message) : h('p', { class: 'error' }, `That article is not in the graph. ${e.message}`)); return; }
       if (id !== this.id) return;
       this.page = page; this.graph = graph;
       document.title = `${page.title}: its connections through time. Rabbit Hole`;
@@ -575,8 +583,9 @@ const Explore = {
     tell(nd.in, 'It links to this article', 'It dropped its link to this article');
     if (!nd.outside && nd.created > t) lines.push(`Nobody had written it yet: it was started on ${longDay(nd.created)}`);
     if (nd.outside) lines.push('Outside the History of Finland set: no history loaded for it');
+    const story = !SNAP || this.page.snapshot.depth !== 'today', there = !nd.outside && (!SNAP || SNAP.ids.has(nd.id));
     return [h('b', null, nd.title), nd.en && nd.en !== nd.title ? h('i', null, nd.en) : null, ...lines.map((l) => h('p', null, l)),
-      h('p', { class: 'faint' }, nd.outside ? 'Click for the life of this link' : 'Click for the life of this link, double-click to go there')];
+      h('p', { class: 'faint' }, [story ? 'Click for the life of this link' : 'The life of this link is not in the snapshot', there ? 'double-click to go there' : null].filter(Boolean).join(', '))];
   },
 
   // time
@@ -618,10 +627,15 @@ const Explore = {
     const p = this.page;
     const also = [p.title_en && p.title_en !== p.title ? p.title_en : null, p.title_sv && p.title_sv !== p.title ? `${p.title_sv} (sv)` : null].filter(Boolean).join(', ');
     this.leadMode = this.leadMode || 'then';
+    const snap = SNAP && p.snapshot, depth = snap && {
+      full: 'In the snapshot month by month: the first day of every month, and the story of every link in the picture.',
+      year: 'In the snapshot year by year: the last day of every year, and the story of every link in the picture.',
+      today: 'In the snapshot as it stands today. The picture plays its whole history; what the article said on a past day is in the live app.' }[snap.depth];
     const leadSeg = (which, text) => h('button', { type: 'button', 'aria-pressed': String(this.leadMode === which), onclick: () => { this.leadMode = which; this.showArticle(); } }, text);
     this.el = {
       on: h('span', { class: 'on' }), lead: h('p', { class: 'lead' }), foot: h('p', { class: 'lead-foot' }),
       facts: h('div', { class: 'facts' }), since: h('div'), near: h('div'), said: h('p', { class: 'said', hidden: true }),
+      kept: h('p', { class: 'kept', hidden: true }),
     };
     const explain = h('button', { class: 'btn', type: 'button', onclick: () => { this.el.said.hidden = false; say(this.el.said, '/api/explain', { kind: 'change', page_id: this.id, when: iso(this.t) }); } }, 'Describe the change in words');
     const target = h('input', { type: 'text', placeholder: 'another article', 'aria-label': 'Another article' }), list = h('ul', { class: 'suggest', hidden: true }), route = h('div', { class: 'route' });
@@ -629,23 +643,25 @@ const Explore = {
       route.textContent = 'Looking…';
       const [then, now] = await Promise.all([api(`/api/path?from=${this.id}&to=${it.page_id}&t=${iso(this.t)}`, `The way to ${it.title} that day`), api(`/api/path?from=${this.id}&to=${it.page_id}`, `The way to ${it.title} today`)]);
       const line = (r) => h('p', null, h('b', null, `${longDay(r.as_of)}: `), r.clicks ? [`${plural(r.clicks, 'click')}. `, r.paths[0].flatMap((x, i) => [i ? h('span', { class: 'hop' }, '›') : null, h('a', { href: `#/a/${x.page_id}` }, x.title)])] : 'no way in three clicks or fewer.');
-      route.replaceChildren(line(then), then.as_of === now.as_of ? null : line(now));
+      fill(route, line(then), then.as_of === now.as_of ? null : line(now));
     });
-    this.panel.replaceChildren(
+    fill(this.panel,
       h('h1', null, p.title), also ? h('p', { class: 'aka' }, also) : null,
       h('p', { class: 'links-out' }, h('a', { href: p.url, target: '_blank', rel: 'noopener' }, 'Read it on Wikipedia'),
-        h('a', { href: `#/a/${this.id}?leads=1` }, `Its opening, rewritten ${n(p.lead_versions)} times`)),
+        !snap || snap.leads ? h('a', { href: `#/a/${this.id}?leads=1` }, `Its opening, rewritten ${n(p.lead_versions)} times`) : null),
+      depth ? h('p', { class: 'depth' }, depth) : null,
       this.el.facts,
       h('div', { class: 'lead-box' },
         h('div', { class: 'lead-head' }, this.el.on, h('div', { class: 'seg' }, leadSeg('then', 'That day'), leadSeg('diff', 'Changes since'))),
-        this.el.lead, h('button', { class: 'more', type: 'button', onclick: (e) => { this.leadOpen = !this.leadOpen; this.el.lead.classList.toggle('open', this.leadOpen); e.target.textContent = this.leadOpen ? 'Show less' : 'Read the whole opening'; } }, this.leadOpen ? 'Show less' : 'Read the whole opening'),
+        this.el.kept, this.el.lead, h('button', { class: 'more', type: 'button', onclick: (e) => { this.leadOpen = !this.leadOpen; this.el.lead.classList.toggle('open', this.leadOpen); e.target.textContent = this.leadOpen ? 'Show less' : 'Read the whole opening'; } }, this.leadOpen ? 'Show less' : 'Read the whole opening'),
         this.el.foot),
-      h('section', null, h('h2', null, 'Since that day'), this.el.since, h('p', { style: 'margin-top:10px' }, explain), this.el.said),
+      h('section', null, h('h2', null, 'Since that day'), this.el.since, SNAP ? null : h('p', { style: 'margin-top:10px' }, explain), this.el.said),
       h('section', null, h('h2', null, 'Close in meaning', h('span', { class: 'sub' }, 'does this article link to them?')), this.el.near),
       p.contested.length ? h('section', null, h('h2', null, 'Connections people fought over'), h('ul', { class: 'contested' }, p.contested.map((c) =>
         h('li', null, h('a', { href: `#/a/${c.src}?e=${encodeURIComponent(c.target)}` }, `${c.src_title} › ${c.target}`),
           h('span', { class: 'meta' }, `added ${n(c.adds)} times, removed ${n(c.removals)}`))))) : null,
-      h('section', null, h('h2', null, 'Get from here to', h('span', { class: 'sub' }, 'by following links, that day and today')), h('div', { class: 'pathform' }, target, list), route));
+      SNAP ? h('section', null, h('h2', null, 'In the live app'), h('p', { class: 'quiet' }, 'A language model describes the change since that day in words, and MariaDB finds the shortest way from here to any other article, that day and today. Both are worked out when asked, so a snapshot does not hold them. ', h('a', { href: LIVE, target: '_blank', rel: 'noopener' }, 'Run it live')))
+        : h('section', null, h('h2', null, 'Get from here to', h('span', { class: 'sub' }, 'by following links, that day and today')), h('div', { class: 'pathform' }, target, list), route));
     this.asof();
   },
   asofLater: debounce(() => Explore.asof(), 170),
@@ -654,13 +670,27 @@ const Explore = {
   async asof(light) {
     if (this.mode !== 'article') return;
     const id = this.id, day = iso(this.t), mine = (this.asofSeq = (this.asofSeq || 0) + 1);
-    Sql.calls = Sql.calls.filter((c) => !c.label.startsWith('That day'));
-    const jobs = [api(`/api/page/${id}/asof?t=${day}`, `That day (${day}): the opening, the links, and what changed since`)];
-    if (!light) jobs.push(api(`/api/page/${id}/neighbours?t=${day}`, `That day (${day}): close in meaning, and linked or not`));
+    const jobs = [api(`/api/page/${id}/asof?t=${day}`)];
+    if (!light) jobs.push(api(`/api/page/${id}/neighbours?t=${day}`));
     let a, near;
     try { [a, near] = await Promise.all(jobs); } catch (e) { return; }
     if (mine !== this.asofSeq || id !== this.id || this.mode !== 'article') return;
-    const el = this.el, isNow = this.t >= this.t1 - DAY;
+    const el = this.el, isNow = this.t >= this.t1 - DAY, kept = a.snapshot ? a.snapshot.kept : day;      // a snapshot answers with the last day it kept
+    Sql.calls = Sql.calls.filter((c) => !c.label.startsWith('That day'));
+    if (kept) Sql.add(`That day (${kept}): the opening, the links, and what changed since`, a.sql);
+    if (kept && near) Sql.add(`That day (${kept}): close in meaning, and linked or not`, near.sql);
+    el.kept.hidden = !a.snapshot || !kept;
+    $('.lead-box .more', this.panel).style.display = kept ? '' : 'none';
+    if (!kept) {                                   // an article the snapshot has only as it stands today, asked for an earlier day
+      el.on.textContent = `On ${longDay(day)}`;
+      el.lead.className = 'lead none';
+      el.lead.textContent = 'The snapshot has this article only as it stands today. The picture and the bars below do show this day; what the article said then is in the live app.';
+      el.foot.textContent = ''; el.facts.replaceChildren();
+      el.since.replaceChildren(h('p', { class: 'quiet' }, 'Drag the handle to the right end to read the article as the data ends.'));
+      el.near.replaceChildren(h('p', { class: 'quiet' }, 'Recorded for the last day only.'));
+      return;
+    }
+    if (a.snapshot) el.kept.textContent = `The snapshot keeps the ${a.snapshot.depth === 'full' ? 'first day of every month' : 'last day of every year'} of this article. This is the last one before ${longDay(a.snapshot.asked)}.`;
     el.on.textContent = isNow ? 'Today' : `On ${longDay(a.as_of)}`;
     el.lead.className = this.leadOpen ? 'lead open' : 'lead';
     if (!a.exists) { el.lead.className = 'lead none'; el.lead.textContent = 'Nobody had written this article yet. Other articles already linked to it.'; el.foot.textContent = ''; }
@@ -687,7 +717,7 @@ const Explore = {
     if (near) {
       const rows = near.neighbours.slice(0, this.nearAll ? 24 : 9);
       const tag = (r) => r.linked_now ? h('span', { class: 'tag yes' }, r.linked_then || isNow ? 'linked' : 'linked since') : r.linked_ever ? h('span', { class: 'tag was' }, r.linked_then ? 'linked then, removed' : 'was linked') : h('span', { class: 'tag never' }, 'never linked');
-      el.near.replaceChildren(near.neighbours.length ? h('ul', { class: 'near' }, rows.map((r) => h('li', null,
+      fill(el.near, near.neighbours.length ? h('ul', { class: 'near' }, rows.map((r) => h('li', null,
         h('a', { class: 't', href: `#/a/${r.page_id}` }, r.title), tag(r), r.title_en && r.title_en !== r.title ? h('span', { class: 'en' }, r.title_en) : null)))
         : h('p', { class: 'quiet' }, 'This article has no vector in dataset S, so there is nothing to compare.'),
       near.neighbours.length > 9 && !this.nearAll ? h('button', { class: 'more', type: 'button', onclick: () => { this.nearAll = true; this.asof(); } }, 'Show more') : null);
@@ -701,11 +731,16 @@ const Explore = {
     if (from) { src = Number(from); target = this.page.title; }
     this.panel.replaceChildren(h('p', { class: 'loading' }, 'Reading the link’s history…'));
     let e;
-    try { e = await api(`/api/edge?src=${src}&target=${encodeURIComponent(target)}`, `One connection: ${target}`); } catch (err) { this.panel.replaceChildren(this.backBtn(), h('p', { class: 'error' }, err.message)); return; }
+    try { e = await api(`/api/edge?src=${src}&target=${encodeURIComponent(target)}`, `One connection: ${target}`); } catch (err) {
+      this.panel.replaceChildren(this.backBtn(), err.snapshot ? h('div', { class: 'unkept' }, h('p', null, err.message),
+        h('p', { class: 'quiet' }, 'The snapshot keeps the story of every link in the picture of the articles it has month by month or year by year. ', h('a', { href: '#/snapshot' }, 'What is in the snapshot')))
+        : h('p', { class: 'error' }, err.message));
+      return;
+    }
     if (this.mode !== 'edge') return;
     const other = src === this.id ? (e.dst ? e.dst.page_id : 't:' + target) : src;
     this.rings.selected = this.rings.nodes.find((nd) => nd.id === other) || null; this.rings.draw();
-    const who = (name, anon) => (anon ? 'an unregistered editor' : name || 'someone');
+    const who = (name, anon) => (anon ? 'an unregistered editor' : name || (e.editors_named === false ? 'a registered editor' : 'someone'));
     const t0 = this.t0, t1 = this.t1, life = svgEl('svg', { viewBox: '0 0 400 34', preserveAspectRatio: 'none' });
     life.append(svgEl('line', { x1: 0, x2: 400, y1: 12, y2: 12, stroke: RULE, 'stroke-width': 2 }));
     for (const p of e.periods) {
@@ -714,12 +749,12 @@ const Explore = {
     }
     const sum = `${e.times_added === 1 ? 'Added once' : `Added ${n(e.times_added)} times`}${e.times_removed ? ` and removed ${e.times_removed === 1 ? 'once' : n(e.times_removed) + ' times'}` : ''}${e.registered_editors > 1 ? `, by ${n(e.registered_editors)} registered editors` : ''}. Today the link is ${e.alive ? 'there' : 'gone'}.`;
     const said = h('p', { class: 'said', hidden: true });
-    this.panel.replaceChildren(this.backBtn(),
+    fill(this.panel, this.backBtn(),
       h('h1', { class: 'edge-title' }, h('a', { href: `#/a/${e.src.page_id}` }, e.src.title), h('span', { class: 'to' }, '›'), e.dst ? h('a', { href: `#/a/${e.dst.page_id}` }, target) : target),
       h('p', { class: 'edge-sum' }, sum),
       h('div', { class: 'lifeline', role: 'img', 'aria-label': 'When the link existed' }, life,
         h('div', { style: 'display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3)' }, h('span', null, yearOf(t0)), h('span', null, 'blue: the link was there'), h('span', null, yearOf(t1)))),
-      h('p', { style: 'margin-top:12px' }, h('button', { class: 'btn solid', type: 'button', onclick: () => { said.hidden = false; say(said, '/api/explain', { kind: 'edge', src, target }); } }, e.times_removed > 1 ? 'Explain the disagreement' : 'Explain this link')),
+      SNAP ? null : h('p', { style: 'margin-top:12px' }, h('button', { class: 'btn solid', type: 'button', onclick: () => { said.hidden = false; say(said, '/api/explain', { kind: 'edge', src, target }); } }, e.times_removed > 1 ? 'Explain the disagreement' : 'Explain this link')),
       said,
       h('ol', { class: 'periods' }, e.periods.map((p) => h('li', { class: p.removed ? 'ended' : '' },
         h('div', { class: 'ev ad' }, h('b', null, 'Added'), h('a', { href: p.add_url, target: '_blank', rel: 'noopener', title: 'See this edit on Wikipedia' }, longDay(p.added_ms)),
@@ -728,7 +763,8 @@ const Explore = {
         p.removed ? h('div', { class: 'ev rm' }, h('b', null, 'Removed'), h('a', { href: p.remove_url, target: '_blank', rel: 'noopener', title: 'See this edit on Wikipedia' }, longDay(p.removed_ms)),
           h('span', { class: 'who' }, `by ${who(p.removed_by, p.removed_anonymous)}`), p.remove_comment ? h('span', { class: 'why' }, `“${p.remove_comment}”`) : null) : null,
         h('p', { class: 'stood' }, p.removed ? `It stood for ${howLong(p.removed_ms - p.added_ms)}. ` : `It has stood for ${howLong(t1 - p.added_ms)}. `,
-          src === this.id || from ? h('button', { class: 'jump', type: 'button', onclick: () => { this.stop(); this.setTime(Math.min(t1, p.added_ms + DAY), false); } }, 'Show that day in the picture') : null)))));
+          src === this.id || from ? h('button', { class: 'jump', type: 'button', onclick: () => { this.stop(); this.setTime(Math.min(t1, p.added_ms + DAY), false); } }, 'Show that day in the picture') : null)))),
+      e.editors_named === false ? h('p', { class: 'unnamed' }, 'Editors are not named in the snapshot: where a summary named one, it now says [editor]. Each date links to the edit on Wikipedia, where its author is credited.') : null);
   },
   backBtn() { return h('button', { class: 'back', type: 'button', onclick: () => { location.hash = `#/a/${this.id}?t=${iso(this.t)}`; } }, `‹ Back to ${this.page.title}`); },
 
@@ -736,7 +772,8 @@ const Explore = {
   async showLeads() {
     this.mode = 'leads';
     this.panel.replaceChildren(h('p', { class: 'loading' }, 'Reading every version of the opening…'));
-    const d = await api(`/api/page/${this.id}/leads`, 'Every version of the opening paragraphs');
+    let d;
+    try { d = await api(`/api/page/${this.id}/leads`, 'Every version of the opening paragraphs'); } catch (err) { this.panel.replaceChildren(this.backBtn(), h('p', { class: err.snapshot ? 'unkept' : 'error' }, err.message)); return; }
     if (this.mode !== 'leads') return;
     this.panel.replaceChildren(this.backBtn(), h('h1', { class: 'edge-title' }, 'How the article opened'),
       h('p', { class: 'edge-sum' }, `The opening of ${this.page.title} has been rewritten ${n(d.versions)} times. These ${n(d.shown.length)} versions each stood for a month or more.`),
@@ -822,7 +859,8 @@ async function showGaps(kind) {
         h('td', null, h('button', { class: 'more', type: 'button', onclick: async () => {
           more.hidden = !more.hidden;
           if (more.hidden || more.childNodes.length) return;
-          const m = await api('/api/wanted?target=' + encodeURIComponent(r.target), `What the encyclopedia already says about ${r.target}`);
+          let m;
+          try { m = await api('/api/wanted?target=' + encodeURIComponent(r.target), `What the encyclopedia already says about ${r.target}`); } catch (err) { more.replaceChildren(h('p', { class: 'quiet' }, err.message)); return; }
           more.replaceChildren(h('ul', { class: 'mentions' }, m.mentions.map((x) => h('li', null, h('b', null, h('a', { href: `#/a/${x.page_id}` }, x.title)), contextNodes(x.context)))));
         } }, 'What is said about it')));
       return [row, h('tr', null, more)];
@@ -879,9 +917,9 @@ async function showBigPicture() {
   const mark = svgEl('g', {}), dot = svgEl('circle', { cx: 0, r: 5, fill: LINK, stroke: '#fff', 'stroke-width': 2 }), tag = svgEl('text', { class: 'val' });
   mark.append(svgEl('line', { x1: 0, x2: 0, y1: 22, y2: 210, stroke: INK, 'stroke-width': 1 }), dot, tag); growth.append(mark);
   const ask = debounce(async (yr) => {
-    const r = await api(`/api/hubs?year=${yr}`, `The whole graph at the end of ${yr}, asked live`);
+    const r = await api(`/api/hubs?year=${yr}`, `The whole graph at the end of ${yr}, ${SNAP ? 'as recorded' : 'asked live'}`);
     const ms = r.sql.reduce((a, x) => a + x.ms, 0);
-    live.textContent = `Asked MariaDB just now: on ${longDay(r.as_of)} the graph had ${n(r.links)} links between ${n(r.pages)} articles, and “${r.hubs[0].title}” was the most linked-to (${n(r.hubs[0].links_in)}). ${Math.round(ms)} ms.`;
+    live.textContent = `${SNAP ? 'MariaDB’s answer, as recorded' : 'Asked MariaDB just now'}: on ${longDay(r.as_of)} the graph had ${n(r.links)} links between ${n(r.pages)} articles, and “${r.hubs[0].title}” was the most linked-to (${n(r.hubs[0].links_in)}). ${Math.round(ms)} ms.`;
   }, 350);
   slider.addEventListener('input', () => { paint(Number(slider.value)); ask(Number(slider.value)); });
   page('',
@@ -911,7 +949,11 @@ async function showAsk(params) {
   $('#q').value = q;
   page('ask-page', h('h1', { class: 'q' }, q), h('p', { class: 'loading' }, 'Searching by meaning and by words…'));
   let d;
-  try { d = await api(`/api/search?q=${encodeURIComponent(q)}${year ? `&year=${year}` : ''}`, `The question: ${q}`); } catch (e) { page('ask-page', h('h1', { class: 'q' }, q), h('p', { class: 'error' }, e.message)); return; }
+  try { d = await api(`/api/search?q=${encodeURIComponent(q)}${year ? `&year=${year}` : ''}`, `The question: ${q}`); } catch (e) {
+    page('ask-page', h('h1', { class: 'q' }, q), e.snapshot ? [h('p', { class: 'caveat' }, e.message), h('p', { class: 'snap-links' }, h('a', { href: LIVE, target: '_blank', rel: 'noopener' }, 'Run Rabbit Hole live'), h('a', { href: '#/snapshot' }, 'What is in the snapshot'))]
+      : h('p', { class: 'error' }, e.message));
+    return;
+  }
   const when = (y, text) => h('button', { type: 'button', 'aria-pressed': String(year === y), onclick: () => { location.hash = `#/ask?q=${encodeURIComponent(q)}${y ? `&year=${y}` : ''}`; } }, text);
   const answer = h('div', { class: 'answer', 'aria-live': 'polite' });
   page('ask-page',
@@ -933,6 +975,46 @@ async function showAsk(params) {
   else answer.textContent = 'No article in the set matches. Try other words, or the Finnish name.';
 }
 
+// ------------------------------------------------------------------ the snapshot: what it holds, and what it does not
+const keptList = () => h('ul', { class: 'kept-list' }, SNAP.full.map((x) => h('li', null, h('a', { class: 't', href: `#/a/${x.page_id}` }, x.title),
+  x.title_en && x.title_en !== x.title ? h('span', { class: 'en' }, x.title_en) : null)));
+
+function notRecorded(message) {
+  return h('div', { class: 'page' }, h('div', { class: 'in' },
+    h('h1', null, 'Not in the snapshot'), h('p', { class: 'intro' }, message),
+    h('p', { class: 'how', style: 'margin-top:18px' }, 'This site replays answers recorded from the database, and it has them for a part of the data. These articles are in it month by month:'),
+    keptList(),
+    h('p', { class: 'snap-links' }, h('a', { href: '#/snapshot' }, 'What is in the snapshot'), h('a', { href: LIVE, target: '_blank', rel: 'noopener' }, 'Run Rabbit Hole live'))));
+}
+
+function showSnapshot() {
+  if (!SNAP) { location.hash = '#/'; return; }
+  const c = SNAP.counts;
+  page('',
+    h('h1', null, 'What is in this snapshot'),
+    h('p', { class: 'intro' }, `This site has no database behind it. It replays ${n(c.answers)} answers that Rabbit Hole got from MariaDB ${SNAP.mariadb.split('-')[0]} on ${longDay(SNAP.made)}, each with the SQL that produced it and the time that SQL took. Nothing is worked out again and nothing is made up.`),
+    h('div', { class: 'tiles' },
+      h('div', null, h('b', null, n(c.full)), h('span', null, 'articles month by month')),
+      h('div', null, h('b', null, n(c.year)), h('span', null, 'articles year by year')),
+      h('div', null, h('b', null, n(c.today)), h('span', null, 'articles as they stand today')),
+      h('div', null, h('b', null, n(c.stories)), h('span', null, 'link stories: every time a link was added and removed'))),
+    h('h2', null, 'Month by month'),
+    h('p', { class: 'how' }, 'The first day of every month of the article’s life, its opening through the years, and the story of every link in its picture. Ask for a day in between and you get the last recorded day before it; the page says which.'),
+    keptList(),
+    h('h2', null, 'The rest'),
+    h('p', { class: 'how' }, `The big picture, the disputes and the gaps are complete: they are the same lists the live app shows. The articles those lists lead to are in the snapshot year by year or as they stand today, and every article’s picture plays its whole history. Titles in grey lead to articles that were not recorded: the data has ${n(c.articles)}, the snapshot ${n(c.full + c.year + c.today)}.`),
+    h('h2', null, 'What only the live app has'),
+    h('ul', { class: 'only-live' },
+      h('li', null, 'Every day of every article, asked of MariaDB’s system-versioned tables as you drag the handle.'),
+      h('li', null, 'Questions in plain language: vector search and full-text search in one statement, then an answer written from the articles as they stood in the year you choose.'),
+      h('li', null, 'A disagreement over a link, or a rewritten opening, explained in words by a language model.'),
+      h('li', null, 'The shortest way from one article to another, on any day.'),
+      h('li', null, 'Editors’ names. A snapshot is a public copy, so it leaves them out; every edit links to Wikipedia, where its author is credited.')),
+    h('h2', null, 'Run it live'),
+    h('p', { class: 'how' }, 'The code, the pipeline that turns Wikipedia’s history into system-versioned tables, and a quick start are on GitHub. The snapshot itself is made by one script, pipeline/snapshot.py.'),
+    h('p', { class: 'snap-links' }, h('a', { href: LIVE, target: '_blank', rel: 'noopener' }, 'Rabbit Hole on GitHub')));
+}
+
 // ------------------------------------------------------------------ router
 function route() {
   const [path, query] = location.hash.replace(/^#\/?/, '').split('?'), parts = path.split('/').filter(Boolean), params = new URLSearchParams(query || '');
@@ -940,7 +1022,7 @@ function route() {
   document.querySelectorAll('.tabs a').forEach((a) => (a.dataset.tab === tab ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
   Tip.hide();
   if (tab !== 'explore') { Explore.stop(); Sql.reset(); }
-  const failed = (e) => view.replaceChildren(h('p', { class: 'error' }, `Something went wrong: ${e.message}. Is MariaDB running, and has pipeline/analyze.py been run?`));
+  const failed = (e) => view.replaceChildren(h('p', { class: 'error' }, `Something went wrong: ${e.message}.${SNAP ? '' : ' Is MariaDB running, and has pipeline/analyze.py been run?'}`));
   if (tab === 'explore') {
     const id = Number(parts[1]) || START;
     if (id !== Explore.id) Sql.reset();
@@ -949,9 +1031,27 @@ function route() {
   else if (parts[0] === 'gaps') showGaps(parts[1]).catch(failed);
   else if (parts[0] === 'big-picture') showBigPicture().catch(failed);
   else if (parts[0] === 'ask') showAsk(params).catch(failed);
+  else if (parts[0] === 'snapshot') showSnapshot();
   else { location.hash = '#/'; }
 }
 addEventListener('hashchange', route);
 addEventListener('keydown', (e) => { if (e.key === 'Escape') Sql.toggle(false); if (e.key === '/' && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { e.preventDefault(); $('#q').focus(); } });
+if (SNAP) {
+  // one line under the bar, on every view: what this site is
+  const strip = h('p', { class: 'snapbar' }, h('b', null, 'Snapshot'),
+    h('span', null, `Answers recorded from MariaDB ${SNAP.mariadb.split('-')[0]} on ${longDay(SNAP.made)}, replayed without a database. Questions and written explanations are in the live app.`),
+    h('a', { href: '#/snapshot' }, 'What is in it'), h('a', { href: LIVE, target: '_blank', rel: 'noopener' }, 'Run it live'));
+  $('.bar').after(strip);
+  document.body.classList.add('snap');
+  new ResizeObserver(() => document.documentElement.style.setProperty('--snapbar', `${strip.offsetHeight}px`)).observe(strip);
+  $('#q').placeholder = 'Find an article by its title';
+  // grey every link to an article that was not recorded, wherever a view puts one
+  const mark = () => document.querySelectorAll('a[href^="#/a/"]:not([data-kept])').forEach((a) => {
+    const kept = SNAP.ids.has(Number(a.getAttribute('href').slice(4).split('?')[0]));
+    a.setAttribute('data-kept', String(kept));
+    if (!kept) a.setAttribute('title', 'Not in the snapshot');
+  });
+  new MutationObserver(mark).observe(document.body, { childList: true, subtree: true });
+}
 Sql.paint();
 route();
